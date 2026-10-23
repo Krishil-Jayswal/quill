@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum OAuthType {
@@ -13,55 +12,116 @@ enum OAuthType {
 }
 
 enum Status {
-  UPLOADING
+  PENDING
   PROCESSING
   COMPLETED
   FAILED
 }
 
-enum Level {
-  Info
-  Error
+enum Stage {
+  MEDIA
+  TRANSCRIPTION
+  OCR
+  NOTES
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
 }
 
 model User {
-  id             String @id @default(uuid())
+  id             String  @id @default(uuid())
   name           String
   email          String
-  profilePicture String
+  profilePicture String?
 
-  oAuthType OAuthType
-  oAuthId   String
+  oauthType OAuthType
+  oauthId   String
 
   videos Video[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  updatedAt DateTime @updatedAt
 
-  @@unique([oAuthType, oAuthId])
+  @@unique([oauthType, oauthId])
 }
 
 model Video {
-  id    String @id @default(uuid())
-  title String
+  id                String @id @default(uuid())
+  title             String
+  filename          String
+  status            Status @default(PENDING)
 
-  name   String
-  status Status
+  userId            String
+  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  logs Log[]
+  jobs Job[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
+  updatedAt DateTime @updatedAt
+}
+
+model Job {
+  id              String @id @default(uuid())
+  videoId         String
+  status          Status @default(PENDING)
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  stageExecutions StageExecution[]
+  artifacts       Artifact[]
+  logs            Log[]
+
+  startedAt    DateTime?
+  completedAt  DateTime?
+  failedAt     DateTime?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StageExecution {
+  id      String @id @default(uuid())
+  jobId   String
+  stage   Stage
+  status  Status @default(PENDING)
+  attempt Int    @default(0)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  startedAt    DateTime?
+  completedAt  DateTime?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([jobId, stage])
+}
+
+model Artifact {
+  id          String  @id @default(uuid())
+  jobId       String
+  stage       Stage
+  objectKey   String
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
 }
 
 model Log {
-  id        String   @id @default(uuid())
-  videoId   String
-  level     Level
-  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
-  message   String
-  timestamp DateTime
+  id      String   @id @default(uuid())
+  jobId   String
+  stage   Stage?
+  level   LogLevel
+  message String
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
 }
